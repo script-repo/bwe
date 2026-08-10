@@ -3,75 +3,35 @@
 const { after, before, test } = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs/promises');
-const net = require('node:net');
 const os = require('node:os');
 const path = require('node:path');
-const { spawn } = require('node:child_process');
 const { once } = require('node:events');
 
 const SERVER_ROOT = path.join(__dirname, '..');
 const REPO_ROOT = path.join(SERVER_ROOT, '..');
 
-let child;
+let server;
 let baseUrl;
 let tempDir;
-let serverOutput = '';
-
-async function reservePort() {
-  const server = net.createServer();
-  server.listen(0, '127.0.0.1');
-  await once(server, 'listening');
-  const { port } = server.address();
-  server.close();
-  await once(server, 'close');
-  return port;
-}
-
-async function waitUntilReady(url) {
-  for (let attempt = 0; attempt < 50; attempt += 1) {
-    try {
-      const response = await fetch(`${url}/readyz`);
-      if (response.ok) return;
-    } catch (err) {
-      // The child may still be starting.
-    }
-    await new Promise((resolve) => setTimeout(resolve, 100));
-  }
-  throw new Error(`Test server did not become ready. Output:\n${serverOutput}`);
-}
 
 before(async () => {
-  const port = await reservePort();
-  baseUrl = `http://127.0.0.1:${port}`;
   tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'bwe-api-test-'));
+  process.env.DATA_DIR = tempDir;
+  process.env.DB_PATH = ':memory:';
+  process.env.STATIC_ROOT = REPO_ROOT;
 
-  child = spawn(process.execPath, [path.join(SERVER_ROOT, 'server.js')], {
-    cwd: REPO_ROOT,
-    env: {
-      ...process.env,
-      PORT: String(port),
-      DATA_DIR: tempDir,
-      DB_PATH: ':memory:',
-      STATIC_ROOT: REPO_ROOT,
-    },
-    stdio: ['ignore', 'pipe', 'pipe'],
-  });
-  child.stdout.on('data', (chunk) => {
-    serverOutput += chunk.toString();
-  });
-  child.stderr.on('data', (chunk) => {
-    serverOutput += chunk.toString();
-  });
-
-  await waitUntilReady(baseUrl);
+  const { start } = require('../server');
+  server = start(0, '127.0.0.1');
+  await once(server, 'listening');
+  baseUrl = `http://127.0.0.1:${server.address().port}`;
 });
 
 after(async () => {
-  if (child && child.exitCode === null) {
-    child.kill();
-    await Promise.race([once(child, 'exit'), new Promise((resolve) => setTimeout(resolve, 2000))]);
-  }
+  if (server) await new Promise((resolve, reject) => server.close((err) => (err ? reject(err) : resolve())));
   if (tempDir) await fs.rm(tempDir, { recursive: true, force: true });
+  delete process.env.DATA_DIR;
+  delete process.env.DB_PATH;
+  delete process.env.STATIC_ROOT;
 });
 
 test('seeds a new database and reports healthy', async () => {

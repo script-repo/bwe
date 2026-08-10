@@ -93,8 +93,18 @@ app.delete('/api/history', (req, res) => {
 // --- Static frontend (existing React bundle + settings/history glue) ---
 app.use(express.static(STATIC_ROOT, { extensions: ['html'] }));
 
-app.listen(PORT, () => {
-  console.log(`BWE server listening on port ${PORT}`);
-  console.log(`Serving static files from ${STATIC_ROOT}`);
-  console.log(`Data directory: ${db.DATA_DIR}`);
-});
+function start(port = PORT, host) {
+  const onListening = () => {
+    console.log(`BWE server listening on port ${port}`);
+    console.log(`Serving static files from ${STATIC_ROOT}`);
+    console.log(`Data directory: ${db.DATA_DIR}`);
+  };
+
+  return host ? app.listen(port, host, onListening) : app.listen(port, onListening);
+}
+
+if (require.main === module) {
+  start();
+}
+
+module.exports = { app, start };
