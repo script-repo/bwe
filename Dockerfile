@@ -1,10 +1,10 @@
 # BWE (Big Wheel of Excitement) - CKA Bootcamp PVC Demo
 #
-# Single-stage image: node:20-slim is glibc-based so better-sqlite3 can use its
+# Single-stage image: node:24-slim is glibc-based so better-sqlite3 can use its
 # published prebuilt binary instead of compiling from source. If you're building
 # in an air-gapped environment where the prebuild can't be downloaded, add a
 # build stage with `apt-get install -y python3 make g++` before `npm ci`.
-FROM node:20-slim
+FROM node:24-slim
 
 WORKDIR /app
 
