@@ -1,0 +1,105 @@
+# Single-replica Deployment mounting two volumes:
+#   /data   - the PVC (read-write): SQLite settings + run history
+#   /config - the ConfigMap (read-only): default seed data + PORT
+#
+# Deliberately kept at replicas: 1. Scaling this past 1 is a teaching moment:
+# ReadWriteOnce constrains writable mounts to one node, not one pod, so the
+# observed result depends on scheduling and the CSI driver. See k8s/README.md.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: bwe
+  namespace: bwe-demo
+  labels:
+    app.kubernetes.io/name: bwe
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: bwe
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: bwe
+    spec:
+      # fsGroup makes the PVC mount group-writable by uid 1000 (the "node"
+      # user the image runs as) - a very common real-world PVC permissions
+      # gotcha worth calling out explicitly.
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        fsGroup: 1000
+      containers:
+        - name: bwe
+          # Build the image from the repo root (`docker build -t bwe:latest .`)
+          # and make it available to your cluster: `kind load docker-image`,
+          # `minikube image load`, or push to a registry you have access to and
+          # update this field accordingly.
+          image: bwe:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 8080
+          env:
+            - name: PORT
+              valueFrom:
+                configMapKeyRef:
+                  name: bwe-config
+                  key: PORT
+            - name: DATA_DIR
+              value: /data
+            - name: SEED_FILE
+              value: /config/seed-data.json
+            # Downward API: proves to the class that the pod identity is
+            # ephemeral even though the data behind it isn't.
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: POD_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+            - name: NODE_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: spec.nodeName
+            - name: POD_IP
+              valueFrom:
+                fieldRef:
+                  fieldPath: status.podIP
+          volumeMounts:
+            - name: data
+              mountPath: /data
+            - name: seed
+              mountPath: /config
+              readOnly: true
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 250m
+              memory: 256Mi
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: http
+            initialDelaySeconds: 3
+            periodSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 10
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: bwe-data
+        - name: seed
+          configMap:
+            name: bwe-config
+            items:
+              - key: seed-data.json
+                path: seed-data.json

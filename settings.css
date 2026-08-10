@@ -2,11 +2,18 @@
  * Settings UI Styles for BWE (Big Wheel of Excitement)
  */
 
-/* Settings Icon */
-.bwe-settings-icon {
+/* Shared floating icon-button cluster (top-right): settings + history icons live here */
+.bwe-icon-cluster {
   position: fixed;
   top: 20px;
   right: 20px;
+  display: flex;
+  flex-direction: row;
+  gap: 12px;
+  z-index: 1000;
+}
+
+.bwe-icon-btn {
   width: 50px;
   height: 50px;
   border-radius: 50%;
@@ -20,14 +27,22 @@
   justify-content: center;
   box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3);
   transition: all 0.3s ease;
-  z-index: 1000;
   padding: 0;
 }
 
-.bwe-settings-icon:hover {
-  transform: scale(1.1) rotate(90deg);
+.bwe-icon-btn:hover {
+  transform: scale(1.1);
   box-shadow: 0 6px 20px rgba(0, 165, 219, 0.5);
   background: #0088bb;
+}
+
+.bwe-icon-btn:active {
+  transform: scale(0.95);
+}
+
+/* Settings icon gets a little rotation flourish on top of the shared base */
+.bwe-settings-icon:hover {
+  transform: scale(1.1) rotate(90deg);
 }
 
 .bwe-settings-icon:active {
@@ -357,9 +372,13 @@
 
 /* Responsive Design */
 @media (max-width: 768px) {
-  .bwe-settings-icon {
+  .bwe-icon-cluster {
     top: 10px;
     right: 10px;
+    gap: 8px;
+  }
+
+  .bwe-icon-btn {
     width: 45px;
     height: 45px;
     font-size: 20px;
@@ -416,7 +435,7 @@
 /* Accessibility */
 .bwe-btn:focus,
 .bwe-input:focus,
-.bwe-settings-icon:focus,
+.bwe-icon-btn:focus,
 .bwe-modal-close:focus {
   outline: 2px solid var(--nutanix-blue, #00A5DB);
   outline-offset: 2px;
@@ -424,8 +443,10 @@
 
 /* Print styles */
 @media print {
-  .bwe-settings-icon,
+  .bwe-icon-cluster,
   .bwe-modal,
+  .bwe-pod-badge,
+  .bwe-loading-overlay,
   .bwe-notification {
     display: none !important;
   }

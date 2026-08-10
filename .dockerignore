@@ -1,0 +1,16 @@
+.git
+.gitignore
+.cursor
+.claude
+node_modules
+server/node_modules
+logs
+*.log
+data
+server/.tmpdata
+*.db
+*.db-shm
+*.db-wal
+Dockerfile
+docker-compose.yml
+.vscode

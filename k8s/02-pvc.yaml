@@ -1,0 +1,21 @@
+# Dynamically-provisioned persistent storage for the SQLite database (settings
+# + run history). storageClassName is intentionally omitted so this uses
+# whichever StorageClass your cluster has marked as default.
+#
+# Before applying, confirm one exists:
+#   kubectl get storageclass
+# You should see exactly one class annotated "(default)". If not, add
+# `storageClassName: <your-class>` below.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: bwe-data
+  namespace: bwe-demo
+  labels:
+    app.kubernetes.io/name: bwe
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 1Gi

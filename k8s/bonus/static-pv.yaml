@@ -1,0 +1,48 @@
+# BONUS EXERCISE: static provisioning.
+#
+# The core demo (k8s/02-pvc.yaml) relies on your cluster's dynamic default
+# StorageClass. This manifest instead hand-creates a PersistentVolume and a
+# PersistentVolumeClaim that binds to it by storageClassName + capacity/access
+# mode - the classic CKA "static provisioning" exercise.
+#
+# hostPath only makes sense on a single-node dev cluster (kind/minikube/k3d).
+# On a multi-node cluster the pod could be scheduled on a different node than
+# the one with /mnt/bwe-static-data and would fail to mount - a good prompt to
+# discuss node affinity / local volumes vs. real network storage.
+#
+# To try it: apply this file, then edit k8s/03-deployment.yaml's
+# `claimName: bwe-data` to `claimName: bwe-data-static` (on a copy!) and
+# re-apply, or just describe/inspect the objects below without swapping the
+# running Deployment.
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: bwe-static-pv
+  labels:
+    app.kubernetes.io/name: bwe
+    type: local
+spec:
+  capacity:
+    storage: 1Gi
+  volumeMode: Filesystem
+  accessModes:
+    - ReadWriteOnce
+  persistentVolumeReclaimPolicy: Retain
+  storageClassName: bwe-static
+  hostPath:
+    path: /mnt/bwe-static-data
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: bwe-data-static
+  namespace: bwe-demo
+  labels:
+    app.kubernetes.io/name: bwe
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: bwe-static
+  resources:
+    requests:
+      storage: 1Gi

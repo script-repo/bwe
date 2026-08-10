@@ -1,0 +1,16 @@
+{
+  "name": "bwe-server",
+  "version": "1.0.0",
+  "description": "Backend API and static server for the Big Wheel of Excitement CKA bootcamp PVC demo",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "test": "node --test"
+  },
+  "license": "ISC",
+  "type": "commonjs",
+  "dependencies": {
+    "better-sqlite3": "^13.0.3",
+    "express": "^5.2.1"
+  }
+}

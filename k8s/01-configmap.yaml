@@ -1,0 +1,36 @@
+# Declarative, non-secret configuration: the listening port and the default
+# "deck" of names/title/subtitle used to seed a *brand new* PVC.
+#
+# Teaching point: editing this ConfigMap and re-applying it does NOT change
+# data that has already been persisted to the PVC - seeding only happens once,
+# the first time the database is empty. To see a ConfigMap change take effect
+# you need a fresh PVC (see k8s/README.md). That split - mutable runtime state
+# on the PVC vs. declarative config in the ConfigMap - is the core lesson here.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: bwe-config
+  namespace: bwe-demo
+  labels:
+    app.kubernetes.io/name: bwe
+data:
+  PORT: "8080"
+  seed-data.json: |
+    {
+      "title": "CKA BOOTCAMP",
+      "subtitle": "PRIZE WHEEL",
+      "names": [
+        "Pod",
+        "Deployment",
+        "Service",
+        "ConfigMap",
+        "Secret",
+        "Ingress",
+        "Namespace",
+        "ReplicaSet",
+        "DaemonSet",
+        "StatefulSet",
+        "PersistentVolume",
+        "Job"
+      ]
+    }

@@ -1,0 +1,100 @@
+'use strict';
+
+const os = require('os');
+const path = require('path');
+const express = require('express');
+const db = require('./db');
+
+const PORT = process.env.PORT || 8080;
+// Repo layout is mirrored 1:1 into the container, so the frontend files
+// (index.html, assets/, etc.) live one level above this file.
+const STATIC_ROOT = process.env.STATIC_ROOT || path.join(__dirname, '..');
+
+db.init();
+
+const app = express();
+app.disable('x-powered-by');
+app.use(express.json());
+
+// Don't expose server source or deployment manifests over the static server.
+app.use((req, res, next) => {
+  if (req.path.startsWith('/server/') || req.path.startsWith('/k8s/') || req.path.startsWith('/.git')) {
+    return res.status(404).end();
+  }
+  next();
+});
+
+// --- Kubernetes probes ---
+app.get('/healthz', (req, res) => {
+  res.status(200).json({ status: 'ok' });
+});
+
+app.get('/readyz', (req, res) => {
+  if (db.isReady()) {
+    res.status(200).json({ status: 'ready' });
+  } else {
+    res.status(503).json({ status: 'not-ready' });
+  }
+});
+
+// --- Pod / node metadata, populated via the Kubernetes Downward API ---
+app.get('/api/meta', (req, res) => {
+  res.json({
+    podName: process.env.POD_NAME || os.hostname(),
+    podNamespace: process.env.POD_NAMESPACE || null,
+    nodeName: process.env.NODE_NAME || null,
+    podIp: process.env.POD_IP || null,
+  });
+});
+
+// --- Settings: title, subtitle, wheel names ---
+app.get('/api/settings', (req, res) => {
+  res.json(db.getSettings());
+});
+
+app.put('/api/settings', (req, res) => {
+  const { title, subtitle, names } = req.body || {};
+
+  if (typeof title !== 'string' || !title.trim()) {
+    return res.status(400).json({ error: 'title is required' });
+  }
+  if (typeof subtitle !== 'string' || !subtitle.trim()) {
+    return res.status(400).json({ error: 'subtitle is required' });
+  }
+  if (!Array.isArray(names) || !names.every((n) => typeof n === 'string')) {
+    return res.status(400).json({ error: 'names must be an array of strings' });
+  }
+
+  const cleanNames = names.map((n) => n.trim()).filter(Boolean).slice(0, 50);
+  const updated = db.saveSettings({ title: title.trim(), subtitle: subtitle.trim(), names: cleanNames });
+  res.json(updated);
+});
+
+// --- Run history ---
+app.get('/api/history', (req, res) => {
+  const limit = Math.min(parseInt(req.query.limit, 10) || 100, 500);
+  res.json(db.getHistory(limit));
+});
+
+app.post('/api/history', (req, res) => {
+  const { name } = req.body || {};
+  if (typeof name !== 'string' || !name.trim()) {
+    return res.status(400).json({ error: 'name is required' });
+  }
+  const entry = db.addHistoryEntry(name.trim().slice(0, 100));
+  res.status(201).json(entry);
+});
+
+app.delete('/api/history', (req, res) => {
+  db.clearHistory();
+  res.status(204).end();
+});
+
+// --- Static frontend (existing React bundle + settings/history glue) ---
+app.use(express.static(STATIC_ROOT, { extensions: ['html'] }));
+
+app.listen(PORT, () => {
+  console.log(`BWE server listening on port ${PORT}`);
+  console.log(`Serving static files from ${STATIC_ROOT}`);
+  console.log(`Data directory: ${db.DATA_DIR}`);
+});

@@ -1,51 +1,27 @@
 /**
  * Settings functionality for BWE (Big Wheel of Excitement)
- * Adds a settings icon and modal for customizing wheel names, title, and subtitle
+ * Adds a settings icon and modal for customizing wheel names, title, and subtitle.
+ *
+ * Persistence lives on the server (SQLite on a PVC in Kubernetes) via the
+ * shared window.BWE API client defined in bwe-core.js. Saving here also
+ * re-injects the new names into the live wheel immediately - no reload needed.
  */
 
-(function() {
+(function () {
   'use strict';
 
-  // Configuration key for localStorage
-  const STORAGE_KEY = 'bwe_settings';
-
-  // Default settings
   const DEFAULT_SETTINGS = {
     title: 'BIG WHEEL',
     subtitle: 'OF EXCITEMENT',
-    names: []
+    names: [],
   };
-
-  // Initialize settings from localStorage or defaults
-  function getSettings() {
-    try {
-      const stored = localStorage.getItem(STORAGE_KEY);
-      if (stored) {
-        return JSON.parse(stored);
-      }
-    } catch (e) {
-      console.error('Error loading settings:', e);
-    }
-    return { ...DEFAULT_SETTINGS };
-  }
-
-  // Save settings to localStorage
-  function saveSettings(settings) {
-    try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(settings));
-      return true;
-    } catch (e) {
-      console.error('Error saving settings:', e);
-      return false;
-    }
-  }
 
   // Create settings icon
   function createSettingsIcon() {
     const icon = document.createElement('button');
     icon.id = 'bwe-settings-icon';
-    icon.className = 'bwe-settings-icon';
-    icon.innerHTML = '⚙️';
+    icon.className = 'bwe-icon-btn bwe-settings-icon';
+    icon.innerHTML = '\u2699\ufe0f';
     icon.title = 'Settings';
     icon.setAttribute('aria-label', 'Open settings');
 
@@ -66,7 +42,7 @@
     modal.innerHTML = `
       <div class="bwe-modal-content">
         <div class="bwe-modal-header">
-          <h2>⚙️ Settings</h2>
+          <h2>\u2699\ufe0f Settings</h2>
           <button class="bwe-modal-close" aria-label="Close settings">&times;</button>
         </div>
 
@@ -103,7 +79,7 @@
             <div class="bwe-section-header">
               <h3>Wheel Names</h3>
               <button id="bwe-add-name-btn" class="bwe-btn bwe-btn-secondary">
-                ➕ Add Name
+                \u2795 Add Name
               </button>
             </div>
 
@@ -115,7 +91,7 @@
 
         <div class="bwe-modal-footer">
           <button id="bwe-reset-btn" class="bwe-btn bwe-btn-danger">
-            Reset to Default
+            Reset Fields
           </button>
           <button id="bwe-save-btn" class="bwe-btn bwe-btn-primary">
             Save Changes
@@ -143,7 +119,7 @@
     modal.querySelector('#bwe-save-btn').addEventListener('click', saveSettingsFromModal);
 
     // Reset button handler
-    modal.querySelector('#bwe-reset-btn').addEventListener('click', resetSettings);
+    modal.querySelector('#bwe-reset-btn').addEventListener('click', resetFormFields);
 
     return modal;
   }
@@ -163,7 +139,7 @@
 
     const deleteBtn = document.createElement('button');
     deleteBtn.className = 'bwe-btn bwe-btn-danger bwe-btn-icon';
-    deleteBtn.innerHTML = '🗑️';
+    deleteBtn.innerHTML = '\ud83d\uddd1\ufe0f';
     deleteBtn.title = 'Remove name';
     deleteBtn.setAttribute('aria-label', 'Remove name');
     deleteBtn.addEventListener('click', () => {
@@ -181,32 +157,40 @@
     return row;
   }
 
-  // Open settings modal
-  function openSettingsModal() {
-    const modal = document.getElementById('bwe-settings-modal');
-    if (!modal) return;
-
-    // Load current settings
-    const settings = getSettings();
-
-    // Populate title and subtitle
-    document.getElementById('bwe-title-input').value = settings.title || '';
-    document.getElementById('bwe-subtitle-input').value = settings.subtitle || '';
-
-    // Clear and populate names list
+  function populateNamesList(names) {
     const namesList = document.getElementById('bwe-names-list');
     namesList.innerHTML = '';
 
-    if (settings.names && settings.names.length > 0) {
-      settings.names.forEach(name => addNameRow(name, false));
+    if (names && names.length > 0) {
+      names.forEach((name) => addNameRow(name, false));
     } else {
-      // If no names, try to extract from the page
-      extractNamesFromPage();
+      addNameRow('', false);
     }
+  }
+
+  // Open settings modal - loads current settings from the server
+  async function openSettingsModal() {
+    const modal = document.getElementById('bwe-settings-modal');
+    if (!modal) return;
 
     modal.style.display = 'flex';
+    document.getElementById('bwe-title-input').value = '';
+    document.getElementById('bwe-subtitle-input').value = '';
+    document.getElementById('bwe-names-list').innerHTML = '<p class="bwe-history-empty">Loading&hellip;</p>';
 
-    // Focus first input
+    let settings;
+    try {
+      settings = await window.BWE.fetchSettings();
+    } catch (err) {
+      console.error('[settings] Failed to load settings:', err);
+      settings = window.BWE.readCachedSettings() || { ...DEFAULT_SETTINGS };
+      window.BWE.notify('Could not reach the server - showing last known settings.', 'info');
+    }
+
+    document.getElementById('bwe-title-input').value = settings.title || '';
+    document.getElementById('bwe-subtitle-input').value = settings.subtitle || '';
+    populateNamesList(settings.names);
+
     setTimeout(() => {
       document.getElementById('bwe-title-input').focus();
     }, 100);
@@ -220,153 +204,75 @@
     }
   }
 
-  // Extract names from the current page (if possible)
-  function extractNamesFromPage() {
-    // Try to find names in the React app's state or DOM
-    // This is a fallback in case no settings exist yet
-    const settings = getSettings();
-
-    if (settings.names && settings.names.length > 0) {
-      settings.names.forEach(name => addNameRow(name, false));
-    } else {
-      // Add some default placeholder rows
-      addNameRow('', false);
-    }
-  }
-
-  // Save settings from modal
-  function saveSettingsFromModal() {
+  // Save settings from modal - persists to the server and applies live
+  async function saveSettingsFromModal() {
     const title = document.getElementById('bwe-title-input').value.trim();
     const subtitle = document.getElementById('bwe-subtitle-input').value.trim();
 
-    // Collect all names
     const nameInputs = document.querySelectorAll('.bwe-name-input');
     const names = Array.from(nameInputs)
-      .map(input => input.value.trim())
-      .filter(name => name.length > 0);
+      .map((input) => input.value.trim())
+      .filter((name) => name.length > 0);
 
     const settings = {
       title: title || DEFAULT_SETTINGS.title,
       subtitle: subtitle || DEFAULT_SETTINGS.subtitle,
-      names: names
+      names,
     };
 
-    if (saveSettings(settings)) {
-      // Apply settings to the page
-      applySettings(settings);
+    const saveBtn = document.getElementById('bwe-save-btn');
+    saveBtn.disabled = true;
+
+    try {
+      const updated = await window.BWE.saveSettings(settings);
+      let applied = false;
+      try {
+        applied = await window.BWE.applySettings(updated);
+      } catch (applyErr) {
+        // The server save already succeeded. Treat a compiled-wheel bridge
+        // failure as a refresh problem rather than claiming persistence failed.
+        console.error('[settings] Saved settings but could not refresh the wheel:', applyErr);
+      }
       closeSettingsModal();
-
-      // Show success message
-      showNotification('Settings saved successfully! Reload the page to see changes.', 'success');
-    } else {
-      showNotification('Error saving settings. Please try again.', 'error');
+      if (applied || updated.names.length === 0) {
+        window.BWE.notify('Settings saved and applied to the wheel!', 'success');
+      } else {
+        window.BWE.notify('Settings saved. Reload the page to refresh the wheel names.', 'info');
+      }
+    } catch (err) {
+      console.error('[settings] Failed to save settings:', err);
+      window.BWE.notify(err.message || 'Error saving settings. Please try again.', 'error');
+    } finally {
+      saveBtn.disabled = false;
     }
   }
 
-  // Reset settings to default
-  function resetSettings() {
-    if (confirm('Are you sure you want to reset all settings to default?')) {
-      localStorage.removeItem(STORAGE_KEY);
+  // Reset the in-modal fields back to blank defaults (does not touch saved data until Save is clicked)
+  function resetFormFields() {
+    if (!confirm('Reset the form fields to blank defaults? Click Save Changes afterwards to apply.')) return;
 
-      // Reload settings in modal
-      const settings = getSettings();
-      document.getElementById('bwe-title-input').value = settings.title;
-      document.getElementById('bwe-subtitle-input').value = settings.subtitle;
+    document.getElementById('bwe-title-input').value = DEFAULT_SETTINGS.title;
+    document.getElementById('bwe-subtitle-input').value = DEFAULT_SETTINGS.subtitle;
+    populateNamesList([]);
 
-      const namesList = document.getElementById('bwe-names-list');
-      namesList.innerHTML = '';
-      addNameRow('', false);
-
-      showNotification('Settings reset to default. Save to apply changes.', 'info');
-    }
-  }
-
-  // Apply settings to the page (update title and subtitle)
-  function applySettings(settings) {
-    // Try to update title
-    const titleElements = document.querySelectorAll('h1.main-title, h1');
-    if (titleElements.length > 0 && settings.title) {
-      titleElements[0].textContent = settings.title;
-    }
-
-    // Try to update subtitle
-    const subtitleElements = document.querySelectorAll('h2.sub-title, h2');
-    if (subtitleElements.length > 0 && settings.subtitle) {
-      subtitleElements[0].textContent = settings.subtitle;
-    }
-
-    // Note: The names need to be handled by the React app
-    // We're just storing them for now, and they'll be used on page reload
-  }
-
-  // Show notification
-  function showNotification(message, type = 'info') {
-    const notification = document.createElement('div');
-    notification.className = `bwe-notification bwe-notification-${type}`;
-    notification.textContent = message;
-
-    document.body.appendChild(notification);
-
-    // Trigger animation
-    setTimeout(() => {
-      notification.classList.add('bwe-notification-show');
-    }, 10);
-
-    // Remove after 3 seconds
-    setTimeout(() => {
-      notification.classList.remove('bwe-notification-show');
-      setTimeout(() => {
-        notification.remove();
-      }, 300);
-    }, 3000);
-  }
-
-  // Initialize settings on page load
-  function initSettings() {
-    // Wait for DOM to be ready
-    if (document.readyState === 'loading') {
-      document.addEventListener('DOMContentLoaded', init);
-    } else {
-      init();
-    }
+    window.BWE.notify('Fields reset. Click Save Changes to apply.', 'info');
   }
 
   function init() {
-    // Create and add settings icon to page
-    const root = document.getElementById('root');
-    if (root) {
-      const icon = createSettingsIcon();
-      document.body.appendChild(icon);
+    const cluster = window.BWE.getIconCluster();
+    cluster.appendChild(createSettingsIcon());
+    document.body.appendChild(createSettingsModal());
 
-      // Create and add modal
-      const modal = createSettingsModal();
-      document.body.appendChild(modal);
-
-      // Apply saved settings on page load
-      const settings = getSettings();
-      if (settings.title || settings.subtitle) {
-        // Wait a bit for React to render
-        setTimeout(() => {
-          applySettings(settings);
-        }, 500);
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') {
+        closeSettingsModal();
       }
-
-      // Listen for Escape key to close modal
-      document.addEventListener('keydown', (e) => {
-        if (e.key === 'Escape') {
-          closeSettingsModal();
-        }
-      });
-    }
+    });
   }
 
-  // Export to window for potential use by the React app
-  window.BWESettings = {
-    get: getSettings,
-    save: saveSettings,
-    apply: applySettings
-  };
-
-  // Initialize
-  initSettings();
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', init);
+  } else {
+    init();
+  }
 })();

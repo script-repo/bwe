@@ -1,0 +1,12 @@
+node_modules/
+server/node_modules/
+
+# Local SQLite data (this is exactly what the PVC holds in Kubernetes)
+data/
+server/.tmpdata/
+*.db
+*.db-shm
+*.db-wal
+
+logs/
+*.log

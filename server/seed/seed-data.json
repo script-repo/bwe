@@ -1,0 +1,18 @@
+{
+  "title": "CKA BOOTCAMP",
+  "subtitle": "PRIZE WHEEL",
+  "names": [
+    "Pod",
+    "Deployment",
+    "Service",
+    "ConfigMap",
+    "Secret",
+    "Ingress",
+    "Namespace",
+    "ReplicaSet",
+    "DaemonSet",
+    "StatefulSet",
+    "PersistentVolume",
+    "Job"
+  ]
+}

@@ -1,95 +1,111 @@
-# BWE Settings Feature
+# BWE Settings & Run History
 
 ## Overview
 
-This document describes the new settings functionality added to the Big Wheel of Excitement (BWE) application.
+This document describes the settings and run-history functionality added to
+the Big Wheel of Excitement (BWE) application.
+
+Both features are backed by a small Express + SQLite server (`server/`) so
+data survives page reloads, container restarts, and Kubernetes pod
+rescheduling - see the top-level [README.md](README.md) and
+[k8s/README.md](k8s/README.md) for the backend/deployment side of this.
 
 ## Features
 
-### 1. Settings Icon
-- A settings icon (⚙️) is displayed in the top-right corner of the page
-- Clicking the icon opens the settings modal
-- The icon has a hover effect with rotation animation
+### 1. Settings Icon (⚙️)
+
+- Displayed top-right, in a shared floating icon cluster alongside the run
+  history icon.
+- Clicking it opens the settings modal, loading the current server-side
+  title/subtitle/names.
 
 ### 2. Settings Modal
 
-The settings modal provides the following customization options:
+- **Title / Subtitle**: edit the text displayed above the wheel.
+- **Wheel Names**: add, edit, or remove (🗑️) names, up to 50.
+- **Save Changes**: persists to the server (`PUT /api/settings`) and applies
+  immediately - the new names are fed into the live wheel via its own CSV
+  upload mechanism, no page reload required.
+- **Reset Fields**: clears the *form* back to blank defaults so you can start
+  over; it does not touch saved data until you click Save Changes.
 
-#### Wheel Text Customization
-- **Title**: Edit the main title displayed on the wheel (e.g., "BIG WHEEL")
-- **Subtitle**: Edit the subtitle displayed below the title (e.g., "OF EXCITEMENT")
+### 3. Run History (🏆)
 
-#### Wheel Names Management
-- **Add Names**: Click the "➕ Add Name" button to add new names to the wheel
-- **Edit Names**: Click on any name input field to edit existing names
-- **Remove Names**: Click the trash icon (🗑️) next to a name to remove it
+- A second icon opens the Run History modal, listing every winner the wheel
+  has produced (name + relative time), newest first.
+- **Clear History** deletes all recorded spins (`DELETE /api/history`).
+- **Export CSV** downloads the current history as a CSV file.
+- Winners are captured automatically: a `MutationObserver` watches for the
+  wheel's own "We Have a Winner!" overlay and records whatever name appears
+  there (`POST /api/history`) - no changes to the compiled wheel bundle
+  needed.
 
-### 3. Settings Persistence
+### 4. Persistence
 
-All settings are saved to the browser's localStorage, which means:
-- Settings persist across page reloads
-- Settings are specific to each browser/device
-- No server-side storage is required
+- Settings and history are stored server-side in SQLite
+  (`server/db.js`), under `DATA_DIR` (default `/data/bwe.db`).
+- On first boot, if there's no data yet, the wheel is seeded from
+  `server/seed/seed-data.json` (or a ConfigMap-mounted file in Kubernetes) so
+  it's never empty.
+- The browser keeps a small `localStorage` cache of the last successfully
+  loaded settings purely as an offline fallback if the server is briefly
+  unreachable - it is not the source of truth.
 
-### 4. User Interface Features
+### 5. Pod/Node Info Badge
 
-- **Responsive Design**: The settings interface adapts to mobile and desktop screens
-- **Accessibility**: Full keyboard navigation support with proper focus management
-- **Visual Feedback**: Success/error notifications for user actions
-- **Escape Key**: Press ESC to close the modal
-- **Click Outside**: Click outside the modal to close it
+- A small badge in the bottom-left corner shows the current pod name and
+  node name (via the Kubernetes Downward API, exposed at `GET /api/meta`).
+- Delete the pod and reload the page: the badge shows a new pod name, but
+  your names and history are unchanged - a quick visual proof that compute is
+  ephemeral while the PVC-backed data isn't.
 
 ## Usage
 
-1. **Open Settings**: Click the ⚙️ icon in the top-right corner
-2. **Edit Title/Subtitle**: Type in the input fields for title and subtitle
-3. **Manage Names**:
-   - Click "Add Name" to add a new name field
-   - Type in the name fields to add or edit names
-   - Click the trash icon to remove a name
-4. **Save Changes**: Click "Save Changes" to apply your settings
-5. **Reset**: Click "Reset to Default" to restore original settings
+1. **Open Settings**: click the ⚙️ icon.
+2. **Edit Title/Subtitle/Names**, then **Save Changes** - changes apply to
+   the wheel immediately.
+3. **Open Run History**: click the 🏆 icon to review, clear, or export past
+   spins.
 
 ## Technical Details
 
-### Files Added
+### Files
 
-- `settings.js` - JavaScript module for settings functionality
-- `settings.css` - Styles for the settings UI
-- `SETTINGS_README.md` - This documentation file
+- `bwe-core.js` - shared API client, toast notifications, and the
+  CSV-injection helper used to feed persisted names into the compiled wheel.
+- `bootstrap.js` - loads settings on page start and renders the pod badge.
+- `settings.js` / `settings.css` - the settings modal.
+- `history.js` / `history.css` - the run-history modal and winner capture.
+- `server/` - the Express + SQLite backend and API (see its own comments for
+  schema and endpoint details).
 
-### Files Modified
+### API
 
-- `index.html` - Added references to settings.js and settings.css
-
-### Storage Format
-
-Settings are stored in localStorage with the key `bwe_settings` in the following format:
-
-```json
-{
-  "title": "BIG WHEEL",
-  "subtitle": "OF EXCITEMENT",
-  "names": ["Name 1", "Name 2", "Name 3"]
-}
-```
+| Method | Path | Purpose |
+|---|---|---|
+| GET | `/api/settings` | Current `{ title, subtitle, names }` |
+| PUT | `/api/settings` | Save settings, returns the saved copy |
+| GET | `/api/history?limit=` | Recent spins, newest first |
+| POST | `/api/history` | Record a winner `{ name }` |
+| DELETE | `/api/history` | Clear all history |
+| GET | `/api/meta` | Pod/node metadata |
+| GET | `/healthz` / `/readyz` | Liveness / readiness probes |
 
 ### Browser Compatibility
 
-- Modern browsers with ES6+ support
-- localStorage support required
-- CSS Grid and Flexbox support
+- Modern browsers with ES2017+ support (`fetch`, `async`/`await`,
+  `DataTransfer`).
+- CSS Grid and Flexbox support.
 
 ## Notes
 
-- The wheel names are stored in settings but require a page reload to be applied to the React app
-- Title and subtitle changes are applied immediately when saved
-- Settings are browser-specific and not synced across devices
+- The wheel names are fed into the React app's real CSV-upload input, capped
+  at 50 entries (the same limit the app itself enforces).
+- Title and subtitle changes update the DOM directly and take effect
+  immediately on save.
 
 ## Future Enhancements
 
-Potential improvements for future versions:
-- Real-time wheel updates without page reload
-- Import/export settings functionality
-- Theme customization
-- Cloud sync for settings across devices
+- Multi-user/auth-gated settings (a Kubernetes Secret would be a natural fit).
+- Import/export full settings (not just history) as JSON.
+- Live updates across open tabs via WebSocket/SSE instead of polling on open.

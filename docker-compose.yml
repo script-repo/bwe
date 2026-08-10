@@ -1,0 +1,21 @@
+# Local smoke test that mirrors what the Kubernetes Deployment does:
+# a single container with a persistent volume mounted at /data.
+#
+#   docker compose up --build
+#   open http://localhost:8080
+#
+# Data written to ./data on the host survives `docker compose down` and
+# `docker compose restart`, the same way the PVC survives pod restarts in k8s.
+services:
+  bwe:
+    build: .
+    image: bwe:local
+    ports:
+      - "8080:8080"
+    environment:
+      PORT: "8080"
+      DATA_DIR: /data
+      POD_NAME: local-docker-compose
+    volumes:
+      - ./data:/data
+    restart: unless-stopped
