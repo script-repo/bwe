@@ -1,16 +1,25 @@
 # BWE (Big Wheel of Excitement) - CKA Bootcamp PVC Demo
 #
-# Single-stage image: node:24-slim is glibc-based so better-sqlite3 can use its
-# published prebuilt binary instead of compiling from source. If you're building
-# in an air-gapped environment where the prebuild can't be downloaded, add a
-# build stage with `apt-get install -y python3 make g++` before `npm ci`.
-FROM node:24-slim
+# Build native dependencies separately so Python and the compiler toolchain do
+# not ship in the runtime image. better-sqlite3 does not publish a prebuild for
+# every supported Node/Linux combination, so the build must be self-sufficient.
+FROM node:24-slim AS dependencies
 
 WORKDIR /app
 
 # Install server dependencies first so this layer is cached across app-code changes.
 COPY server/package.json server/package-lock.json ./server/
+RUN apt-get update \
+  && apt-get install -y --no-install-recommends python3 make g++ \
+  && rm -rf /var/lib/apt/lists/*
 RUN npm --prefix server ci --omit=dev
+
+# Keep the production image slim and free of build tools.
+FROM node:24-slim
+
+WORKDIR /app
+
+COPY --from=dependencies /app/server/node_modules ./server/node_modules
 
 # Copy the rest of the repo: static frontend at /app, server code at /app/server.
 # (server/node_modules and local data/ are excluded via .dockerignore.)
