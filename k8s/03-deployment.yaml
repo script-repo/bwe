@@ -31,11 +31,10 @@ spec:
         fsGroup: 1000
       containers:
         - name: bwe
-          # Build the image from the repo root (`docker build -t bwe:latest .`)
-          # and make it available to your cluster: `kind load docker-image`,
-          # `minikube image load`, or push to a registry you have access to and
-          # update this field accordingly.
-          image: bwe:latest
+          # Pinned to the immutable GHCR image produced by the repository's
+          # tested main-branch workflow. Update this digest-like commit tag when
+          # intentionally rolling out a newer application build.
+          image: ghcr.io/script-repo/bwe:b7be0bd7bfc7f3febed39cda9b81c3746e7ee0a6
           imagePullPolicy: IfNotPresent
           ports:
             - name: http

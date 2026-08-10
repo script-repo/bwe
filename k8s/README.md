@@ -18,15 +18,21 @@ ConfigMaps, probes, and the practical limits of `ReadWriteOnce` volumes.
 | `bonus/static-pv.yaml` | PV + PVC | Manual/static provisioning exercise (hostPath) |
 | `bonus/cronjob-backup.yaml` | CronJob | Backup job sharing the same PVC - RWO discussion prompt |
 
-## 1. Build and load the image
+## 1. Choose the image
+
+The checked-in Deployment is pinned to a public, immutable GHCR image built
+and tested by `.github/workflows/publish-image.yml`. You can deploy that image
+as-is and skip to the StorageClass check below.
+
+If you changed the application locally, build your own image:
 
 ```bash
 docker build -t bwe:latest .
 ```
 
-Then make the image available to your cluster (pick the one that matches
-your setup, or push to a registry you control and update the `image:` field
-in `k8s/03-deployment.yaml`):
+Then make it available to your cluster (pick the one that matches your setup,
+or push to a registry you control and update the `image:` field in
+`k8s/03-deployment.yaml`):
 
 ```bash
 # kind
