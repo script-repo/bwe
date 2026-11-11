@@ -72,6 +72,16 @@ test('validates, normalizes, caps, and persists settings', async () => {
   assert.equal((await reloaded.json()).names.length, 50);
 });
 
+test('drops duplicate names case-insensitively when saving', async () => {
+  const saved = await fetch(`${baseUrl}/api/settings`, {
+    method: 'PUT',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ title: 'T', subtitle: 'S', names: ['Ada', ' ada', 'Alan', 'ALAN ', 'Grace'] }),
+  });
+  assert.equal(saved.status, 200);
+  assert.deepEqual((await saved.json()).names, ['Ada', 'Alan', 'Grace']);
+});
+
 test('records, lists, and clears run history', async () => {
   const created = await fetch(`${baseUrl}/api/history`, {
     method: 'POST',

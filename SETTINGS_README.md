@@ -39,6 +39,12 @@ rescheduling - see the top-level [README.md](README.md) and
   wheel's own "We Have a Winner!" overlay and records whatever name appears
   there (`POST /api/history`) - no changes to the compiled wheel bundle
   needed.
+- **No repeat winners**: once the winner overlay is closed, that name is
+  removed from the wheel. Drawn names stay off the wheel across page reloads
+  (remembered in the browser), and the wheel is never refilled automatically.
+  When one name is left, saving settings starts a new round with everyone.
+- **No duplicate names**: duplicates (case-insensitive) are dropped when
+  settings are saved and whenever names are loaded onto the wheel.
 
 ### 4. Persistence
 

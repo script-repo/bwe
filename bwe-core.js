@@ -14,11 +14,64 @@
 
   const LOCAL_CACHE_KEY = 'bwe_settings_cache';
 
-  // Names currently on the wheel. `fullNames` is the configured list (from
-  // settings); `remainingNames` shrinks as winners are drawn so nobody can be
-  // picked twice. Saving settings or reloading the page restores the full list.
+  const DRAWN_KEY = 'bwe_drawn_names';
+
+  // Names currently on the wheel. `fullNames` is the configured (de-duplicated)
+  // list from settings; `remainingNames` shrinks as winners are drawn. Drawn
+  // names are remembered in localStorage (tied to the exact name list) so a
+  // page reload doesn't bring them back. Saving settings starts a new round.
   let fullNames = [];
   let remainingNames = [];
+
+  function nameKey(name) {
+    return String(name).trim().toLowerCase();
+  }
+
+  // Keep the first spelling of each name; drop blanks and case-insensitive repeats.
+  function dedupeNames(names) {
+    const seen = new Set();
+    return names.filter((name) => {
+      const key = nameKey(name);
+      if (!key || seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+  }
+
+  function listFingerprint(names) {
+    return JSON.stringify(names.map(nameKey));
+  }
+
+  function loadDrawnKeys(names) {
+    try {
+      const saved = JSON.parse(localStorage.getItem(DRAWN_KEY) || 'null');
+      if (saved && saved.fingerprint === listFingerprint(names) && Array.isArray(saved.drawn)) {
+        return new Set(saved.drawn);
+      }
+    } catch (e) {
+      // unreadable or unavailable storage: start a fresh round
+    }
+    return new Set();
+  }
+
+  function saveDrawnKeys(names, drawnKeys) {
+    try {
+      localStorage.setItem(
+        DRAWN_KEY,
+        JSON.stringify({ fingerprint: listFingerprint(names), drawn: Array.from(drawnKeys) })
+      );
+    } catch (e) {
+      // best-effort only
+    }
+  }
+
+  function resetDrawnNames() {
+    try {
+      localStorage.removeItem(DRAWN_KEY);
+    } catch (e) {
+      // best-effort only
+    }
+  }
 
   async function fetchSettings() {
     const res = await fetch('/api/settings');
@@ -136,8 +189,10 @@
     return true;
   }
 
-  async function injectNames(names) {
-    if (!Array.isArray(names) || names.length === 0) return false;
+  async function injectNames(rawNames) {
+    if (!Array.isArray(rawNames)) return false;
+    const names = dedupeNames(rawNames);
+    if (names.length === 0) return false;
 
     let input = document.querySelector('input[type="file"][accept=".csv"]');
     if (!input) {
@@ -166,38 +221,42 @@
   async function applySettings(settings) {
     if (!settings) return false;
     applyText(settings.title, settings.subtitle);
-    if (Array.isArray(settings.names) && settings.names.length > 0) {
-      fullNames = settings.names.slice();
-      return injectNames(settings.names);
+    if (!Array.isArray(settings.names)) return false;
+
+    fullNames = dedupeNames(settings.names);
+    if (fullNames.length === 0) return false;
+
+    const drawnKeys = loadDrawnKeys(fullNames);
+    let remaining = fullNames.filter((name) => !drawnKeys.has(nameKey(name)));
+    if (remaining.length === 0) {
+      // Every name was already drawn: start a fresh round rather than show an empty wheel.
+      resetDrawnNames();
+      remaining = fullNames;
     }
-    return false;
+    return injectNames(remaining);
   }
 
   /**
-   * Remove a drawn winner from the live wheel so the next spin cannot pick
-   * them again. Only one occurrence is removed, so intentionally duplicated
-   * names keep their remaining entries. Once fewer than two names are left
-   * (the wheel refuses to spin with fewer), the full list is restored.
+   * Remove a drawn winner from the live wheel so they can never be picked
+   * again this round. The wheel is not refilled automatically: once one name
+   * is left, saving settings starts a new round.
    *
-   * Resolves to { removed, refilled, applied }.
+   * Resolves to { removed, applied, remaining }.
    */
   async function removeWinner(name) {
-    const index = remainingNames.indexOf(name);
-    if (index === -1) return { removed: false, refilled: false, applied: false };
+    const key = nameKey(name);
+    const next = remainingNames.filter((n) => nameKey(n) !== key);
+    if (next.length === remainingNames.length) {
+      return { removed: false, applied: false, remaining: remainingNames.slice() };
+    }
 
-    let next = remainingNames.slice(0, index).concat(remainingNames.slice(index + 1));
-    let refilled = false;
-    if (next.length < 2 && fullNames.length >= 2) {
-      next = fullNames.slice();
-      refilled = true;
-    }
-    if (next.length === 0) {
-      remainingNames = next;
-      return { removed: true, refilled, applied: false };
-    }
+    const drawnKeys = loadDrawnKeys(fullNames);
+    drawnKeys.add(key);
+    saveDrawnKeys(fullNames, drawnKeys);
 
     const applied = await injectNames(next);
-    return { removed: true, refilled, applied };
+    if (!applied) remainingNames = next;
+    return { removed: true, applied, remaining: next.slice() };
   }
 
   function getRemainingNames() {
@@ -244,6 +303,8 @@
     applySettings,
     removeWinner,
     getRemainingNames,
+    resetDrawnNames,
+    dedupeNames,
     notify,
     getIconCluster,
   };

@@ -210,9 +210,12 @@
     const subtitle = document.getElementById('bwe-subtitle-input').value.trim();
 
     const nameInputs = document.querySelectorAll('.bwe-name-input');
-    const names = Array.from(nameInputs)
+    const enteredNames = Array.from(nameInputs)
       .map((input) => input.value.trim())
       .filter((name) => name.length > 0);
+    // A name may only appear on the wheel once (case-insensitive).
+    const names = window.BWE.dedupeNames(enteredNames);
+    const duplicatesRemoved = enteredNames.length - names.length;
 
     const settings = {
       title: title || DEFAULT_SETTINGS.title,
@@ -225,6 +228,8 @@
 
     try {
       const updated = await window.BWE.saveSettings(settings);
+      // Saving starts a new round: every saved name goes back on the wheel.
+      window.BWE.resetDrawnNames();
       let applied = false;
       try {
         applied = await window.BWE.applySettings(updated);
@@ -234,6 +239,12 @@
         console.error('[settings] Saved settings but could not refresh the wheel:', applyErr);
       }
       closeSettingsModal();
+      if (duplicatesRemoved > 0) {
+        window.BWE.notify(
+          `Removed ${duplicatesRemoved} duplicate name${duplicatesRemoved === 1 ? '' : 's'}.`,
+          'info'
+        );
+      }
       if (applied || updated.names.length === 0) {
         window.BWE.notify('Settings saved and applied to the wheel!', 'success');
       } else {

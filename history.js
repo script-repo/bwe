@@ -169,8 +169,11 @@
       if (typeof window.BWE.removeWinner !== 'function') continue;
       window.BWE.removeWinner(name)
         .then((result) => {
-          if (result && result.refilled) {
-            window.BWE.notify('All names have been drawn - the wheel has been refilled.', 'info');
+          if (result && result.removed && result.remaining.length === 1) {
+            window.BWE.notify(
+              `Only ${result.remaining[0]} is left. Save settings to start a new round.`,
+              'info'
+            );
           }
         })
         .catch((err) => {

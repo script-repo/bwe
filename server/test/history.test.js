@@ -126,7 +126,7 @@ test('removes the winner from the wheel only after the overlay closes', () => {
       addHistoryEntry: () => Promise.resolve(),
       removeWinner(name) {
         removedNames.push(name);
-        return Promise.resolve({ removed: true, refilled: false, applied: true });
+        return Promise.resolve({ removed: true, applied: true, remaining: ['Ada', 'Alan'] });
       },
       notify() {},
     },
