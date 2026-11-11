@@ -65,7 +65,18 @@ app.put('/api/settings', (req, res) => {
     return res.status(400).json({ error: 'names must be an array of strings' });
   }
 
-  const cleanNames = names.map((n) => n.trim()).filter(Boolean).slice(0, 50);
+  // Drop blanks and duplicates (case-insensitive, first spelling wins) so a
+  // name can never appear on the wheel more than once.
+  const seen = new Set();
+  const cleanNames = names
+    .map((n) => n.trim())
+    .filter((n) => {
+      const key = n.toLowerCase();
+      if (!n || seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    })
+    .slice(0, 50);
   const updated = db.saveSettings({ title: title.trim(), subtitle: subtitle.trim(), names: cleanNames });
   res.json(updated);
 });
