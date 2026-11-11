@@ -14,6 +14,12 @@
 
   const LOCAL_CACHE_KEY = 'bwe_settings_cache';
 
+  // Names currently on the wheel. `fullNames` is the configured list (from
+  // settings); `remainingNames` shrinks as winners are drawn so nobody can be
+  // picked twice. Saving settings or reloading the page restores the full list.
+  let fullNames = [];
+  let remainingNames = [];
+
   async function fetchSettings() {
     const res = await fetch('/api/settings');
     if (!res.ok) throw new Error(`Failed to load settings (${res.status})`);
@@ -145,7 +151,9 @@
       input = await waitForWheelInput(resetButton ? 2000 : 5000);
     }
 
-    return dispatchNamesToInput(input, names);
+    const injected = dispatchNamesToInput(input, names);
+    if (injected) remainingNames = names.slice();
+    return injected;
   }
 
   function applyText(title, subtitle) {
@@ -159,9 +167,41 @@
     if (!settings) return false;
     applyText(settings.title, settings.subtitle);
     if (Array.isArray(settings.names) && settings.names.length > 0) {
+      fullNames = settings.names.slice();
       return injectNames(settings.names);
     }
     return false;
+  }
+
+  /**
+   * Remove a drawn winner from the live wheel so the next spin cannot pick
+   * them again. Only one occurrence is removed, so intentionally duplicated
+   * names keep their remaining entries. Once fewer than two names are left
+   * (the wheel refuses to spin with fewer), the full list is restored.
+   *
+   * Resolves to { removed, refilled, applied }.
+   */
+  async function removeWinner(name) {
+    const index = remainingNames.indexOf(name);
+    if (index === -1) return { removed: false, refilled: false, applied: false };
+
+    let next = remainingNames.slice(0, index).concat(remainingNames.slice(index + 1));
+    let refilled = false;
+    if (next.length < 2 && fullNames.length >= 2) {
+      next = fullNames.slice();
+      refilled = true;
+    }
+    if (next.length === 0) {
+      remainingNames = next;
+      return { removed: true, refilled, applied: false };
+    }
+
+    const applied = await injectNames(next);
+    return { removed: true, refilled, applied };
+  }
+
+  function getRemainingNames() {
+    return remainingNames.slice();
   }
 
   // --- Shared toast notifications, reused by settings.js and history.js ---
@@ -202,6 +242,8 @@
     injectNames,
     applyText,
     applySettings,
+    removeWinner,
+    getRemainingNames,
     notify,
     getIconCluster,
   };

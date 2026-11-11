@@ -10,6 +10,8 @@
 
   let cachedHistory = [];
   const capturedOverlays = new WeakSet();
+  // Winners waiting to be removed from the wheel once their overlay closes.
+  const pendingRemovals = [];
 
   function escapeHtml(str) {
     const div = document.createElement('div');
@@ -156,11 +158,34 @@
     URL.revokeObjectURL(url);
   }
 
+  // Re-injecting names resets the wheel, so wait until the winner overlay has
+  // been dismissed ("Play Again" / click outside) before removing the winner.
+  function processPendingRemovals() {
+    for (let i = pendingRemovals.length - 1; i >= 0; i -= 1) {
+      const { overlay, name } = pendingRemovals[i];
+      if (overlay.isConnected !== false) continue;
+      pendingRemovals.splice(i, 1);
+
+      if (typeof window.BWE.removeWinner !== 'function') continue;
+      window.BWE.removeWinner(name)
+        .then((result) => {
+          if (result && result.refilled) {
+            window.BWE.notify('All names have been drawn - the wheel has been refilled.', 'info');
+          }
+        })
+        .catch((err) => {
+          console.error('[history] Failed to remove winner from the wheel:', err);
+        });
+    }
+  }
+
   // The compiled wheel has no event/callback we can hook, so we watch the DOM
   // for its winner overlay (`.winner-overlay` > `.winner-card` > name `<div>`)
-  // and record whatever name shows up there.
+  // and record whatever name shows up there. Once that overlay
+  // closes, the winner is removed from the wheel so they can't be drawn again.
   function observeWinnerOverlay() {
     const observer = new MutationObserver(() => {
+      processPendingRemovals();
       document.querySelectorAll('.winner-overlay').forEach((overlay) => {
         if (capturedOverlays.has(overlay)) return;
 
@@ -172,6 +197,7 @@
         // other UI mutations can continue for several seconds, but one overlay
         // always represents exactly one completed spin.
         capturedOverlays.add(overlay);
+        pendingRemovals.push({ overlay, name: winnerName });
         window.BWE.addHistoryEntry(winnerName).catch((err) => {
           console.error('[history] Failed to record winner:', err);
         });

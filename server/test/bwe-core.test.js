@@ -145,3 +145,45 @@ test('waits for the compiled wheel input during initial render', async () => {
   assert.equal(harness.state.resetClicks, 0);
   assert.equal(injectedCsv(harness), '"Initial"\n"Deck"');
 });
+
+test('removes a drawn winner from the live wheel', async () => {
+  const harness = createHarness({ inputPresent: true });
+  await harness.BWE.applySettings({ names: ['Alpha', 'Beta', 'Gamma'] });
+
+  harness.state.input.dispatchedEvents = [];
+  const result = await harness.BWE.removeWinner('Beta');
+
+  assert.deepEqual({ ...result }, { removed: true, refilled: false, applied: true });
+  assert.equal(injectedCsv(harness), '"Alpha"\n"Gamma"');
+  assert.deepEqual([...harness.BWE.getRemainingNames()], ['Alpha', 'Gamma']);
+});
+
+test('removes only one occurrence of a duplicated winner', async () => {
+  const harness = createHarness({ inputPresent: true });
+  await harness.BWE.applySettings({ names: ['Alpha', 'Beta', 'Alpha'] });
+
+  await harness.BWE.removeWinner('Alpha');
+  assert.deepEqual([...harness.BWE.getRemainingNames()], ['Beta', 'Alpha']);
+});
+
+test('refills the full list once fewer than two names remain', async () => {
+  const harness = createHarness({ inputPresent: true });
+  await harness.BWE.applySettings({ names: ['Alpha', 'Beta'] });
+
+  harness.state.input.dispatchedEvents = [];
+  const result = await harness.BWE.removeWinner('Alpha');
+
+  assert.equal(result.refilled, true);
+  assert.equal(injectedCsv(harness), '"Alpha"\n"Beta"');
+});
+
+test('ignores winners that are not on the wheel', async () => {
+  const harness = createHarness({ inputPresent: true });
+  await harness.BWE.applySettings({ names: ['Alpha', 'Beta', 'Gamma'] });
+
+  harness.state.input.dispatchedEvents = [];
+  const result = await harness.BWE.removeWinner('Zed');
+
+  assert.equal(result.removed, false);
+  assert.equal(harness.state.input.dispatchedEvents.length, 0);
+});
