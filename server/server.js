@@ -16,14 +16,6 @@ const app = express();
 app.disable('x-powered-by');
 app.use(express.json());
 
-// Don't expose server source or deployment manifests over the static server.
-app.use((req, res, next) => {
-  if (req.path.startsWith('/server/') || req.path.startsWith('/k8s/') || req.path.startsWith('/.git')) {
-    return res.status(404).end();
-  }
-  next();
-});
-
 // --- Kubernetes probes ---
 app.get('/healthz', (req, res) => {
   res.status(200).json({ status: 'ok' });
@@ -102,7 +94,37 @@ app.delete('/api/history', (req, res) => {
 });
 
 // --- Static frontend (existing React bundle + settings/history glue) ---
-app.use(express.static(STATIC_ROOT, { extensions: ['html'] }));
+// Only an explicit allowlist is served. The repo root also holds server/,
+// k8s/, tests and node_modules, so serving the whole directory (even behind a
+// prefix deny list) could be bypassed with encodings like /%73erver/db.js or
+// //server/db.js. Routes match the raw path; anything not listed here 404s.
+const PUBLIC_FILES = new Set([
+  'index.html',
+  'bwe-core.js',
+  'bootstrap.js',
+  'settings.js',
+  'history.js',
+  'settings.css',
+  'history.css',
+  'beer-glass.png',
+  'beer-glass-v2.png',
+  'center-logo.png',
+  'vite.svg',
+]);
+const SEND_OPTIONS = { root: STATIC_ROOT, dotfiles: 'deny' };
+
+app.get('/', (req, res, next) => {
+  res.sendFile('index.html', SEND_OPTIONS, (err) => err && next(err));
+});
+
+app.get('/:file', (req, res, next) => {
+  if (!PUBLIC_FILES.has(req.params.file)) return next();
+  res.sendFile(req.params.file, SEND_OPTIONS, (err) => err && next(err));
+});
+
+// Compiled Vite bundle. express.static resolves paths inside this directory
+// only and rejects traversal attempts.
+app.use('/assets', express.static(path.join(STATIC_ROOT, 'assets'), { index: false, dotfiles: 'deny' }));
 
 function start(port = PORT, host) {
   const onListening = () => {

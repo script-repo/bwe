@@ -110,3 +110,61 @@ test('serves the frontend without exposing server source', async () => {
   const source = await fetch(`${baseUrl}/server/server.js`);
   assert.equal(source.status, 404);
 });
+
+test('serves every allowlisted frontend file', async () => {
+  const files = [
+    '/index.html',
+    '/bwe-core.js',
+    '/bootstrap.js',
+    '/settings.js',
+    '/history.js',
+    '/settings.css',
+    '/history.css',
+    '/beer-glass.png',
+    '/beer-glass-v2.png',
+    '/center-logo.png',
+    '/vite.svg',
+  ];
+  const index = await (await fetch(`${baseUrl}/`)).text();
+  for (const asset of index.match(/\.\/assets\/[^"]+/g)) files.push(asset.slice(1));
+
+  for (const file of files) {
+    const response = await fetch(`${baseUrl}${file}`);
+    assert.equal(response.status, 200, `${file} should be served`);
+    await response.arrayBuffer();
+  }
+});
+
+test('does not expose repository files under any path encoding', async () => {
+  const blocked = [
+    '/server/db.js',
+    '/%73erver/db.js',
+    '/server%2fdb.js',
+    '/server%2Fdb.js',
+    '//server/db.js',
+    '/./server/db.js',
+    '/SERVER/db.js',
+    '/server/package.json',
+    '/server/test/api.test.js',
+    '/server/seed/seed-data.json',
+    '/server/node_modules/express/package.json',
+    '/k8s/03-deployment.yaml',
+    '/%6b8s/03-deployment.yaml',
+    '/k8s%2f03-deployment.yaml',
+    '/.git/config',
+    '/%2egit/config',
+    '/.github/workflows/publish-image.yml',
+    '/README.md',
+    '/Dockerfile',
+    '/assets/..%2fserver%2fdb.js',
+    '/assets/%2e%2e/server/db.js',
+    '/index',
+  ];
+
+  for (const file of blocked) {
+    const response = await fetch(`${baseUrl}${file}`);
+    const body = await response.text();
+    assert.ok(response.status >= 400, `${file} should not be served (got ${response.status})`);
+    assert.doesNotMatch(body, /better-sqlite3|apiVersion|\[core\]/, `${file} leaked repository content`);
+  }
+});
