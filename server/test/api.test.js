@@ -102,6 +102,32 @@ test('records, lists, and clears run history', async () => {
   assert.deepEqual(await empty.json(), []);
 });
 
+test('only honours positive-integer history limits, clamped to 500', async () => {
+  await fetch(`${baseUrl}/api/history`, { method: 'DELETE' });
+  for (let i = 0; i < 510; i += 1) {
+    const created = await fetch(`${baseUrl}/api/history`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ name: `Spin ${i}` }),
+    });
+    assert.equal(created.status, 201);
+  }
+
+  const count = async (query) => (await (await fetch(`${baseUrl}/api/history${query}`)).json()).length;
+  assert.equal(await count(''), 100);
+  assert.equal(await count('?limit=1'), 1);
+  assert.equal(await count('?limit=25'), 25);
+  assert.equal(await count('?limit=500'), 500);
+  assert.equal(await count('?limit=100000'), 500);
+  assert.equal(await count('?limit=-1'), 100);
+  assert.equal(await count('?limit=0'), 100);
+  assert.equal(await count('?limit=2.5'), 100);
+  assert.equal(await count('?limit=abc'), 100);
+  assert.equal(await count('?limit=10&limit=20'), 100);
+
+  await fetch(`${baseUrl}/api/history`, { method: 'DELETE' });
+});
+
 test('serves the frontend without exposing server source', async () => {
   const index = await fetch(`${baseUrl}/`);
   assert.equal(index.status, 200);

@@ -74,9 +74,21 @@ app.put('/api/settings', (req, res) => {
 });
 
 // --- Run history ---
+const DEFAULT_HISTORY_LIMIT = 100;
+const MAX_HISTORY_LIMIT = 500;
+
+// Only a positive integer is honoured (clamped to MAX_HISTORY_LIMIT). Anything
+// else - missing, zero, negative, fractional, non-numeric - falls back to the
+// default. This matters because SQLite treats a negative LIMIT as "no limit".
+function parseHistoryLimit(raw) {
+  if (typeof raw !== 'string' || !/^[0-9]+$/.test(raw)) return DEFAULT_HISTORY_LIMIT;
+  const limit = Number(raw);
+  if (!Number.isSafeInteger(limit) || limit < 1) return DEFAULT_HISTORY_LIMIT;
+  return Math.min(limit, MAX_HISTORY_LIMIT);
+}
+
 app.get('/api/history', (req, res) => {
-  const limit = Math.min(parseInt(req.query.limit, 10) || 100, 500);
-  res.json(db.getHistory(limit));
+  res.json(db.getHistory(parseHistoryLimit(req.query.limit)));
 });
 
 app.post('/api/history', (req, res) => {
