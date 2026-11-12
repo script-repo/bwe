@@ -40,6 +40,10 @@ app.get('/api/meta', (req, res) => {
 });
 
 // --- Settings: title, subtitle, wheel names ---
+// Keep in step with MIN_NAMES / MAX_NAMES in settings.js.
+const MIN_NAMES = 2;
+const MAX_NAMES = 50;
+
 app.get('/api/settings', (req, res) => {
   res.json(db.getSettings());
 });
@@ -67,8 +71,19 @@ app.put('/api/settings', (req, res) => {
       if (!n || seen.has(key)) return false;
       seen.add(key);
       return true;
-    })
-    .slice(0, 50);
+    });
+
+  // The compiled wheel can't spin with fewer than 2 names and only loads the
+  // first 50, so reject anything outside that range instead of silently
+  // saving a deck the wheel can't use or dropping names past the 50th.
+  if (cleanNames.length < MIN_NAMES) {
+    return res.status(400).json({ error: `Add at least ${MIN_NAMES} names - the wheel needs ${MIN_NAMES} to spin.` });
+  }
+  if (cleanNames.length > MAX_NAMES) {
+    return res.status(400).json({
+      error: `The wheel holds at most ${MAX_NAMES} names (got ${cleanNames.length}). Remove ${cleanNames.length - MAX_NAMES} and try again.`,
+    });
+  }
   const updated = db.saveSettings({ title: title.trim(), subtitle: subtitle.trim(), names: cleanNames });
   res.json(updated);
 });

@@ -16,6 +16,11 @@
     names: [],
   };
 
+  // The compiled wheel needs at least 2 names to spin and only loads the first
+  // 50. Keep in step with MIN_NAMES / MAX_NAMES in server/server.js.
+  const MIN_NAMES = 2;
+  const MAX_NAMES = 50;
+
   // Create settings icon
   function createSettingsIcon() {
     const icon = document.createElement('button');
@@ -112,6 +117,10 @@
 
     // Add name button handler
     modal.querySelector('#bwe-add-name-btn').addEventListener('click', () => {
+      if (countNameRows() >= MAX_NAMES) {
+        window.BWE.notify(`The wheel holds at most ${MAX_NAMES} names.`, 'info');
+        return;
+      }
       addNameRow('');
     });
 
@@ -122,6 +131,20 @@
     modal.querySelector('#bwe-reset-btn').addEventListener('click', resetFormFields);
 
     return modal;
+  }
+
+  function countNameRows() {
+    return document.querySelectorAll('.bwe-name-input').length;
+  }
+
+  // Disable "Add Name" once the list is full, so nobody types names that
+  // could never fit on the wheel.
+  function updateAddNameButton() {
+    const addBtn = document.getElementById('bwe-add-name-btn');
+    if (!addBtn) return;
+    const full = countNameRows() >= MAX_NAMES;
+    addBtn.disabled = full;
+    addBtn.title = full ? `The wheel holds at most ${MAX_NAMES} names` : '';
   }
 
   // Add a name row to the list
@@ -144,11 +167,13 @@
     deleteBtn.setAttribute('aria-label', 'Remove name');
     deleteBtn.addEventListener('click', () => {
       row.remove();
+      updateAddNameButton();
     });
 
     row.appendChild(input);
     row.appendChild(deleteBtn);
     namesList.appendChild(row);
+    updateAddNameButton();
 
     if (focus) {
       input.focus();
@@ -217,6 +242,20 @@
     const names = window.BWE.dedupeNames(enteredNames);
     const duplicatesRemoved = enteredNames.length - names.length;
 
+    // Validate before saving so the wheel never ends up with a deck it can't
+    // use. The server enforces the same limits.
+    if (names.length < MIN_NAMES) {
+      window.BWE.notify(`Add at least ${MIN_NAMES} different names - the wheel needs ${MIN_NAMES} to spin.`, 'error');
+      return;
+    }
+    if (names.length > MAX_NAMES) {
+      window.BWE.notify(
+        `The wheel holds at most ${MAX_NAMES} names. Remove ${names.length - MAX_NAMES} and try again.`,
+        'error'
+      );
+      return;
+    }
+
     const settings = {
       title: title || DEFAULT_SETTINGS.title,
       subtitle: subtitle || DEFAULT_SETTINGS.subtitle,
@@ -245,7 +284,7 @@
           'info'
         );
       }
-      if (applied || updated.names.length === 0) {
+      if (applied) {
         window.BWE.notify('Settings saved and applied to the wheel!', 'success');
       } else {
         window.BWE.notify('Settings saved. Reload the page to refresh the wheel names.', 'info');

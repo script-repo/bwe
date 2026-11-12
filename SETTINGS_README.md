@@ -22,7 +22,10 @@ rescheduling - see the top-level [README.md](README.md) and
 ### 2. Settings Modal
 
 - **Title / Subtitle**: edit the text displayed above the wheel.
-- **Wheel Names**: add, edit, or remove (🗑️) names, up to 50.
+- **Wheel Names**: add, edit, or remove (🗑️) names. A deck needs between 2
+  and 50 different names: the wheel can't spin with fewer than 2, and "Add
+  Name" is disabled at 50. The server rejects decks outside that range with a
+  `400` and a clear message rather than silently trimming them.
 - **Save Changes**: persists to the server (`PUT /api/settings`) and applies
   immediately - the new names are fed into the live wheel via its own CSV
   upload mechanism, no page reload required.
@@ -90,8 +93,8 @@ rescheduling - see the top-level [README.md](README.md) and
 | Method | Path | Purpose |
 |---|---|---|
 | GET | `/api/settings` | Current `{ title, subtitle, names }` |
-| PUT | `/api/settings` | Save settings, returns the saved copy |
-| GET | `/api/history?limit=` | Recent spins, newest first |
+| PUT | `/api/settings` | Save settings (2-50 unique names), returns the saved copy |
+| GET | `/api/history?limit=` | Recent spins, newest first (`limit` 1-500, default 100) |
 | POST | `/api/history` | Record a winner `{ name }` |
 | DELETE | `/api/history` | Clear all history |
 | GET | `/api/meta` | Pod/node metadata |

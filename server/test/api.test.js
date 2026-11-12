@@ -47,20 +47,20 @@ test('seeds a new database and reports healthy', async () => {
   assert.equal(settings.names.length, 12);
 });
 
-test('validates, normalizes, caps, and persists settings', async () => {
-  const invalid = await fetch(`${baseUrl}/api/settings`, {
+function putSettings(body) {
+  return fetch(`${baseUrl}/api/settings`, {
     method: 'PUT',
     headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ title: '', subtitle: 'Valid', names: [] }),
+    body: JSON.stringify(body),
   });
+}
+
+test('validates, normalizes, and persists settings', async () => {
+  const invalid = await putSettings({ title: '', subtitle: 'Valid', names: ['A', 'B'] });
   assert.equal(invalid.status, 400);
 
-  const names = Array.from({ length: 55 }, (_, index) => ` Name ${index + 1} `);
-  const saved = await fetch(`${baseUrl}/api/settings`, {
-    method: 'PUT',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ title: ' Audit Wheel ', subtitle: ' Test Deck ', names }),
-  });
+  const names = Array.from({ length: 50 }, (_, index) => ` Name ${index + 1} `);
+  const saved = await putSettings({ title: ' Audit Wheel ', subtitle: ' Test Deck ', names });
   assert.equal(saved.status, 200);
   assert.deepEqual(await saved.json(), {
     title: 'Audit Wheel',
@@ -70,6 +70,33 @@ test('validates, normalizes, caps, and persists settings', async () => {
 
   const reloaded = await fetch(`${baseUrl}/api/settings`);
   assert.equal((await reloaded.json()).names.length, 50);
+});
+
+test('rejects more than 50 names instead of dropping them', async () => {
+  const names = Array.from({ length: 55 }, (_, index) => `Name ${index + 1}`);
+  const response = await putSettings({ title: 'T', subtitle: 'S', names });
+  assert.equal(response.status, 400);
+  assert.match((await response.json()).error, /at most 50 names \(got 55\)/);
+
+  // Duplicates are dropped before counting, so 50 unique names plus repeats is fine.
+  const withRepeats = [...names.slice(0, 50), 'name 1', 'NAME 2'];
+  const ok = await putSettings({ title: 'T', subtitle: 'S', names: withRepeats });
+  assert.equal(ok.status, 200);
+  assert.equal((await ok.json()).names.length, 50);
+
+  const failedSaveKeptData = await putSettings({ title: 'T', subtitle: 'S', names });
+  assert.equal(failedSaveKeptData.status, 400);
+  assert.equal((await (await fetch(`${baseUrl}/api/settings`)).json()).names.length, 50);
+});
+
+test('rejects fewer than 2 names, since the wheel cannot spin', async () => {
+  for (const names of [[], ['Solo'], ['Solo', ' solo ', '   ']]) {
+    const response = await putSettings({ title: 'T', subtitle: 'S', names });
+    assert.equal(response.status, 400, JSON.stringify(names));
+    assert.match((await response.json()).error, /at least 2 names/);
+  }
+  const ok = await putSettings({ title: 'T', subtitle: 'S', names: ['Ada', 'Alan'] });
+  assert.equal(ok.status, 200);
 });
 
 test('drops duplicate names case-insensitively when saving', async () => {
