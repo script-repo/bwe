@@ -158,7 +158,10 @@ PVCs hold mutable runtime state, and the two don't automatically reconcile.**
 - `bonus/static-pv.yaml` - manually bind a PV/PVC pair instead of relying on
   dynamic provisioning (single-node/kind/minikube only, uses `hostPath`).
 - `bonus/cronjob-backup.yaml` - a CronJob that mounts the same PVC on a
-  schedule; use it to discuss RWO scheduling constraints across pods.
+  schedule; use it to discuss RWO scheduling constraints across pods. It uses
+  SQLite's online backup API (via the app image's `better-sqlite3`) rather
+  than `cp`: the app runs SQLite in WAL mode, so recent writes live in
+  `bwe.db-wal` and a plain file copy of `bwe.db` can silently miss them.
 
 ## 9. Cleanup
 

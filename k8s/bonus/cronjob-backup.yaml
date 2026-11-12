@@ -26,22 +26,54 @@ spec:
             app.kubernetes.io/name: bwe-backup
         spec:
           restartPolicy: OnFailure
+          # Same uid/gid as the app so the job can read the PVC files.
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 1000
+            runAsGroup: 1000
+            fsGroup: 1000
           containers:
             - name: backup
-              image: busybox:1.36
+              # The app image already ships better-sqlite3, so no extra image is
+              # needed. Keep this tag in step with k8s/03-deployment.yaml.
+              image: ghcr.io/script-repo/bwe:eb92f383346331c0d63053209bb4436b4a7f8eb4
+              imagePullPolicy: IfNotPresent
+              # The app runs SQLite in WAL mode (server/db.js), so recent commits
+              # live in bwe.db-wal until a checkpoint. A plain `cp bwe.db` can
+              # miss them or catch a torn page. SQLite's online backup API reads
+              # the db and its WAL as one consistent snapshot, and works on a
+              # read-only mount while the app keeps writing.
               command:
-                - sh
-                - -c
+                - node
+                - -e
                 - |
-                  set -e
-                  ts=$(date +%Y%m%d-%H%M%S)
-                  if [ -f /data/bwe.db ]; then
-                    cp /data/bwe.db "/backup/bwe-$ts.db"
-                    echo "Backed up /data/bwe.db -> /backup/bwe-$ts.db"
-                  else
-                    echo "No /data/bwe.db yet - nothing to back up."
-                  fi
-                  ls -la /backup
+                  const fs = require('fs');
+                  const Database = require('/app/server/node_modules/better-sqlite3');
+                  const src = '/data/bwe.db';
+                  if (!fs.existsSync(src)) {
+                    console.log('No /data/bwe.db yet - nothing to back up.');
+                    process.exit(0);
+                  }
+                  const ts = new Date().toISOString().replace(/[-:]/g, '').replace('T', '-').slice(0, 15);
+                  const dest = `/backup/bwe-${ts}.db`;
+                  const db = new Database(src, { readonly: true, fileMustExist: true });
+                  db.backup(dest)
+                    .then(() => {
+                      db.close();
+                      // The copy inherits WAL mode; switch it to a rollback
+                      // journal so the backup is one self-contained file.
+                      const copy = new Database(dest);
+                      copy.pragma('journal_mode = DELETE');
+                      const check = copy.pragma('integrity_check', { simple: true });
+                      copy.close();
+                      if (check !== 'ok') throw new Error(`integrity_check failed: ${check}`);
+                      console.log(`Backed up ${src} -> ${dest} (integrity ok)`);
+                      console.log(fs.readdirSync('/backup').join('\n'));
+                    })
+                    .catch((err) => {
+                      console.error('Backup failed:', err.message);
+                      process.exit(1);
+                    });
               volumeMounts:
                 - name: data
                   mountPath: /data
@@ -51,10 +83,16 @@ spec:
               resources:
                 requests:
                   cpu: 50m
-                  memory: 32Mi
+                  memory: 64Mi
                 limits:
                   cpu: 100m
-                  memory: 64Mi
+                  memory: 128Mi
+              securityContext:
+                allowPrivilegeEscalation: false
+                readOnlyRootFilesystem: true
+                capabilities:
+                  drop:
+                    - ALL
           volumes:
             - name: data
               persistentVolumeClaim:
