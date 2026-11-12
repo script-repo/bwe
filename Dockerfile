@@ -21,17 +21,23 @@ WORKDIR /app
 
 COPY --from=dependencies /app/server/node_modules ./server/node_modules
 
-# Copy the rest of the repo: static frontend at /app, server code at /app/server.
-# (server/node_modules and local data/ are excluded via .dockerignore.)
-COPY . .
+# Copy only what the app needs at runtime: the server code and seed data, plus
+# the allowlisted frontend files (see PUBLIC_FILES in server/server.js). Tests,
+# manifests, docs and CI config stay out of the image. Everything under /app
+# stays owned by root, so the app process can't rewrite its own code.
+COPY server/package.json server/server.js server/db.js ./server/
+COPY server/seed ./server/seed
+COPY index.html bwe-core.js bootstrap.js settings.js history.js settings.css history.css ./
+COPY beer-glass.png beer-glass-v2.png center-logo.png vite.svg ./
+COPY assets ./assets
 
 ENV NODE_ENV=production \
     PORT=8080 \
     DATA_DIR=/data
 
 # /data is where the PVC gets mounted in Kubernetes; pre-create it here too so
-# `docker run` without a volume still works, and hand it to the non-root user.
-RUN mkdir -p /data && chown -R node:node /app /data
+# `docker run` without a volume still works. It's the only writable path.
+RUN mkdir -p /data && chown node:node /data
 
 USER node
 

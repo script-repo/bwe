@@ -35,7 +35,10 @@ spec:
       securityContext:
         runAsNonRoot: true
         runAsUser: 1000
+        runAsGroup: 1000
         fsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
       containers:
         - name: bwe
           # Pinned to the immutable GHCR image produced by the repository's
@@ -74,12 +77,23 @@ spec:
               valueFrom:
                 fieldRef:
                   fieldPath: status.podIP
+          # The image filesystem is read-only; only /data (PVC) and /tmp
+          # (scratch space for SQLite temp files) are writable.
+          securityContext:
+            runAsNonRoot: true
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
           volumeMounts:
             - name: data
               mountPath: /data
             - name: seed
               mountPath: /config
               readOnly: true
+            - name: tmp
+              mountPath: /tmp
           resources:
             requests:
               cpu: 100m
@@ -103,6 +117,9 @@ spec:
         - name: data
           persistentVolumeClaim:
             claimName: bwe-data
+        - name: tmp
+          emptyDir:
+            sizeLimit: 64Mi
         - name: seed
           configMap:
             name: bwe-config

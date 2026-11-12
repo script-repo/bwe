@@ -18,4 +18,13 @@ services:
       POD_NAME: local-docker-compose
     volumes:
       - ./data:/data
+    # Mirror the Kubernetes securityContext: read-only image filesystem, only
+    # /data (and a scratch /tmp) writable, no extra privileges.
+    read_only: true
+    tmpfs:
+      - /tmp
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
     restart: unless-stopped
