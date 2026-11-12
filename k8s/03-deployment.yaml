@@ -14,6 +14,13 @@ metadata:
     app.kubernetes.io/name: bwe
 spec:
   replicas: 1
+  # Recreate stops the old pod before starting the new one. With the default
+  # RollingUpdate, a rollout starts the new pod first: on another node it
+  # hangs on a Multi-Attach error for the RWO volume, and on the same node two
+  # processes briefly write the same SQLite file. Expect a few seconds of
+  # downtime per rollout instead.
+  strategy:
+    type: Recreate
   selector:
     matchLabels:
       app.kubernetes.io/name: bwe

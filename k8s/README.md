@@ -127,6 +127,15 @@ an application architecture intended for concurrent access: for example, an
 RWX-capable file service where appropriate, or an external database instead
 of multiple application processes sharing one SQLite file.
 
+The same constraint is why `03-deployment.yaml` uses `strategy: Recreate`
+instead of the default `RollingUpdate`. A rolling update starts the new pod
+before stopping the old one, so a rollout (for example, bumping the image tag)
+would hit the same Multi-Attach problem on another node, or briefly run two
+SQLite writers on the same node. `Recreate` stops the old pod first, trading a
+few seconds of downtime for a safe hand-off of the volume. Try
+`kubectl -n bwe-demo rollout restart deployment/bwe` and watch the old pod
+terminate before the new one is created.
+
 Scale back down before moving on:
 
 ```bash
