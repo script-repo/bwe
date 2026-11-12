@@ -41,7 +41,7 @@ spec:
           # Pinned to the immutable GHCR image produced by the repository's
           # tested main-branch workflow. Update this digest-like commit tag when
           # intentionally rolling out a newer application build.
-          image: ghcr.io/script-repo/bwe:b7be0bd7bfc7f3febed39cda9b81c3746e7ee0a6
+          image: ghcr.io/script-repo/bwe:eb92f383346331c0d63053209bb4436b4a7f8eb4
           imagePullPolicy: IfNotPresent
           ports:
             - name: http
