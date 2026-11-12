@@ -6,9 +6,9 @@ on:
       - main
   workflow_dispatch:
 
+# Least privilege by default; only the publish job can write to GHCR.
 permissions:
   contents: read
-  packages: write
 
 env:
   IMAGE_NAME: ghcr.io/${{ github.repository }}
@@ -36,6 +36,9 @@ jobs:
   publish:
     needs: test
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
     steps:
       - name: Check out repository
         uses: actions/checkout@v5
